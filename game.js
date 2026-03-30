@@ -265,37 +265,28 @@ class Dino {
   }
 
   // ── AI methods ──
-  scheduleJump() {
-    if (this.nextJumpFrame !== null) return;
-    if (!this.onGround) return;
+ scheduleJump() {
+  if (this.nextJumpFrame !== null) return;
+  if (!this.onGround) return;
 
-    const next = obstacles.find(o => {
-      if (o.x + o.w <= this.x) return false;
-      if (o.type === 'bird' && o.y + o.h < this.y) return false;
-      return true;
-    });
+  const next = obstacles.find(o => {
+    if (o.x + o.w <= this.x) return false;
+    if (o.type === 'bird' && o.y + o.h < this.y) return false;
+    return true;
+  });
 
-    if (!next) return;
+  if (!next) return;
 
-    let collision_frame = Infinity;
-    for (let i = 1; i <= 120; i++) {
-      const futureObs  = { x: next.x - speed * i, y: next.y, w: next.w, h: next.h };
-      const futureDino = { x: this.x + 4, y: this.y + 4, w: this.w - 8, h: this.h - 4 };
-      if (rectsOverlap(futureDino, futureObs)) {
-        collision_frame = i;
-        break;
-      }
-    }
+  // frames until front of obstacle reaches dino — no loop needed
+  const collision_frame = Math.floor((next.x - (this.x + this.w)) / speed);
+  if (collision_frame <= 0) return;
 
-    if (collision_frame === Infinity) return;
+  const frames_until_jump = collision_frame - FRAMES_TO_PEAK;
+  this.nextJumpFrame = frameCount + Math.max(0, frames_until_jump);
 
-    const frames_until_jump = collision_frame - FRAMES_TO_PEAK;
-    this.nextJumpFrame = frameCount + Math.max(0, frames_until_jump);
-
-    const obsLabel = next.type === 'bird' ? 'bird' : `cactus(h=${next.h})`;
-    aiLog(`${obsLabel} → collision in ${collision_frame}f, jump in ${Math.max(0, frames_until_jump)}f`);
-  }
-
+  const obsLabel = next.type === 'bird' ? 'bird' : `cactus(h=${next.h})`;
+  aiLog(`${obsLabel} → collision in ${collision_frame}f, jump in ${Math.max(0, frames_until_jump)}f`);
+}
   executeJump() {
     if (this.nextJumpFrame !== null && frameCount >= this.nextJumpFrame) {
       this.jump(true);  // isAI = true → plays ai-jump sound
