@@ -29,6 +29,28 @@ export interface ObstacleState {
   requiredPower?: number // min power to clear (undefined for birds)
 }
 
+export interface PointState {
+  x: number
+  y: number
+}
+
+export interface RectState {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface AiDebugOverlayState {
+  arcPoints: PointState[]
+  dinoRect: RectState
+  obstacleRect: RectState
+  maxRect: RectState
+  jumpStartX: number
+  power: number
+  jumpInFrames: number
+}
+
 // ── Game ──────────────────────────────────────────────────────
 
 export type GamePhase = 'waiting' | 'playing' | 'gameover'
@@ -49,6 +71,7 @@ export interface GameState {
   obstacles:   ObstacleState[]
   hiScore:     number
   aiLogLines:  string[]   // newest-first, max 5
+  aiDebugOverlay?: AiDebugOverlayState
 
   /** Human jump-charge state (broadcast so all clients see the power bar) */
   humanCharging:       boolean
@@ -73,3 +96,4 @@ export type ClientMessage =
   | { type: 'jump'; power: number }        // Keys 1-5          → instant jump at fixed power
   | { type: 'duckStart'  }
   | { type: 'duckEnd'    }
+  | { type: 'setDebugOverlay'; enabled: boolean }

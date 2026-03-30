@@ -18,50 +18,65 @@ export const CHARGE_FRAMES_MAX = 30   // hold duration to go from min → max po
 // ── Obstacle design limits ────────────────────────────────────
 
 export const OBSTACLE_H_MIN = 20    // shortest cactus (px)
-export const OBSTACLE_H_MAX = 130   // tallest cactus (px) — requires p ≈ 0.94
+// Keep cactus top below the absolute max jump peak at p=1.0.
+export const OBSTACLE_H_MAX = Math.max(
+  OBSTACLE_H_MIN,
+  Math.floor(maxClearableHeight(JUMP_POWER_MAX)) - 1,
+)
+export const OBSTACLE_H_SCALE_MIN = 0.3
+export const OBSTACLE_H_SCALE_MAX = 0.7
+export const OBSTACLE_H_EFFECTIVE_MAX = Math.max(
+  OBSTACLE_H_MIN,
+  Math.floor(OBSTACLE_H_MAX * OBSTACLE_H_SCALE_MAX),
+)
 
 // ── Derived physics formulas ──────────────────────────────────
 //
 // Jump arc (Gauss sum derivation):
 //   v(n) = JUMP_VEL*p + GRAVITY*n
-//   y(n) = y0 + n*(JUMP_VEL*p) + 0.3*n*(n-1)      [0.3 = GRAVITY/2]
+//   y(n) = y0 + n*(JUMP_VEL*p) + (GRAVITY/2)*n*(n-1)
 //
-// Peak:  n_peak = -JUMP_VEL*p / GRAVITY = 13p/0.6
-// Land:  y(n) = y0  →  n = 13p/0.3 + 1
+// Peak:  n_peak = -JUMP_VEL*p / GRAVITY
+// Land:  y(n) = y0  →  n = -2*JUMP_VEL*p / GRAVITY + 1
 //
 // Max clearable height:
-//   H_max(p) = 140.833*p^2 + 6.5*p
+//   H_max(p) = (JUMP_VEL²/(2*GRAVITY))*p² - (JUMP_VEL/2)*p
 //
 // Min power to clear height h:
-//   p_min(h) = (-39 + sqrt(1521 + 20280*h)) / 1690
+//   Solve A*p² + B*p - h = 0 where:
+//     A = JUMP_VEL²/(2*GRAVITY), B = -JUMP_VEL/2
 //
 // Clearance window (frames dino is above height h):
-//   Δn = 2 * sqrt((13p+0.3)^2 - 1.2*h) / 0.6
+//   Δn = (2/GRAVITY) * sqrt(((-JUMP_VEL*p)+(GRAVITY/2))² - 2*GRAVITY*h)
 
 /** Peak frame (continuous) for a given jump power. */
 export function framesToPeak(power: number): number {
-  return (-JUMP_VEL * power) / GRAVITY  // = 13p / 0.6
+  return (-JUMP_VEL * power) / GRAVITY
 }
 
 /** Air-time in frames: discrete landing frame for a given jump power. */
 export function airTimeFrames(power: number): number {
-  // n_land = 13p/0.3 + 1  (exact from quadratic derivation)
-  return Math.ceil((-JUMP_VEL * power) / (GRAVITY / 2) + 1)
+  const launchSpeed = -JUMP_VEL * power
+  // n_land = (2*launchSpeed/GRAVITY) + 1
+  return Math.ceil((2 * launchSpeed) / GRAVITY + 1)
 }
 
 /** Maximum obstacle height clearable at a given jump power (px, with full dino). */
 export function maxClearableHeight(power: number): number {
-  // H_max(p) = 140.833p² + 6.5p  (closed form)
-  return 140.833 * power * power + 6.5 * power
+  const v = JUMP_VEL * power
+  const quad = (v * v) / (2 * GRAVITY)
+  const linear = -v / 2
+  return quad + linear
 }
 
 /**
  * Minimum jump power required to clear an obstacle of height h.
  * Clamped to [JUMP_POWER_MIN, JUMP_POWER_MAX].
- * p_min(h) = (-39 + sqrt(1521 + 20280h)) / 1690
  */
 export function minPowerForHeight(h: number): number {
-  const p = (-39 + Math.sqrt(1521 + 20280 * h)) / 1690
+  const A = (JUMP_VEL * JUMP_VEL) / (2 * GRAVITY)
+  const B = -JUMP_VEL / 2
+  const p = (-B + Math.sqrt(B * B + 4 * A * h)) / (2 * A)
   return Math.max(JUMP_POWER_MIN, Math.min(JUMP_POWER_MAX, p))
 }
 
@@ -70,9 +85,10 @@ export function minPowerForHeight(h: number): number {
  * Returns 0 if the obstacle is not clearable at this power.
  */
 export function clearanceFrames(power: number, h: number): number {
-  const term = (13 * power + 0.3) ** 2 - 1.2 * h
+  const launchSpeed = -JUMP_VEL * power
+  const term = (launchSpeed + GRAVITY / 2) ** 2 - 2 * GRAVITY * h
   if (term <= 0) return 0
-  return (2 / GRAVITY) * Math.sqrt(term)  // = 2/0.6 * sqrt(...)
+  return (2 / GRAVITY) * Math.sqrt(term)
 }
 
 /**

@@ -19,6 +19,43 @@ const sound    = new SoundManager()
 const ui       = new UIManager()
 
 let particles: Particle[] = []
+type PlayMode = 'ai-player' | 'ai-only'
+
+const modeSwitch = document.getElementById('mode-switch') as HTMLSelectElement | null
+const debugOverlaySwitch = document.getElementById('debug-overlay-switch') as HTMLInputElement | null
+
+let playMode: PlayMode = 'ai-player'
+let showDebugOverlays = false
+
+function applyRenderOptions() {
+  renderer.setOptions({
+    showHuman: playMode === 'ai-player',
+    showDebugOverlays,
+  })
+}
+
+function isHumanControlLocked(): boolean {
+  return playMode === 'ai-only' && latestState?.phase === 'playing'
+}
+
+if (modeSwitch) {
+  modeSwitch.value = playMode
+  modeSwitch.addEventListener('change', () => {
+    playMode = (modeSwitch.value === 'ai-only') ? 'ai-only' : 'ai-player'
+    applyRenderOptions()
+  })
+}
+
+if (debugOverlaySwitch) {
+  debugOverlaySwitch.checked = showDebugOverlays
+  debugOverlaySwitch.addEventListener('change', () => {
+    showDebugOverlays = debugOverlaySwitch.checked
+    applyRenderOptions()
+    send('setDebugOverlay', { enabled: showDebugOverlays })
+  })
+}
+
+applyRenderOptions()
 
 // ── WebSocket ─────────────────────────────────────────────────
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -42,6 +79,10 @@ ws.onmessage = (ev: MessageEvent) => {
   if (state.events.humanJumped) sound.play('playerJump')
 
   latestState = state
+}
+
+ws.onopen = () => {
+  send('setDebugOverlay', { enabled: showDebugOverlays })
 }
 
 ws.onerror = () => console.error('[ws] connection error')
@@ -69,17 +110,20 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
   // ── Hold SPACE / ArrowUp to charge ──
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault()
+    if (isHumanControlLocked()) return
     send('jumpStart')
   }
 
   // ── Keys 1-5: instant fixed-power jump ──
   if (POWER_KEYS[e.code] !== undefined) {
     e.preventDefault()
+    if (isHumanControlLocked()) return
     send('jump', { power: POWER_KEYS[e.code] })
   }
 
   if (e.code === 'ArrowDown') {
     e.preventDefault()
+    if (isHumanControlLocked()) return
     send('duckStart')
   }
 })
@@ -88,27 +132,33 @@ window.addEventListener('keyup', (e: KeyboardEvent) => {
   keys[e.code] = false
 
   if (e.code === 'Space' || e.code === 'ArrowUp') {
+    if (isHumanControlLocked()) return
     send('jumpRelease')
   }
   if (e.code === 'ArrowDown') {
+    if (isHumanControlLocked()) return
     send('duckEnd')
   }
 })
 
 // ── Touch (button event attributes) ──────────────────────────
 function onJumpPress() {
+  if (isHumanControlLocked()) return
   send('jumpStart')
   document.getElementById('btn-jump')?.classList.add('pressed')
 }
 function onJumpRelease() {
+  if (isHumanControlLocked()) return
   send('jumpRelease')
   document.getElementById('btn-jump')?.classList.remove('pressed')
 }
 function onDuckPress() {
+  if (isHumanControlLocked()) return
   send('duckStart')
   document.getElementById('btn-duck')?.classList.add('pressed')
 }
 function onDuckRelease() {
+  if (isHumanControlLocked()) return
   send('duckEnd')
   document.getElementById('btn-duck')?.classList.remove('pressed')
 }

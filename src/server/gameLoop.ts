@@ -1,10 +1,20 @@
 import { Dino }                                        from './entities/dino'
 import { Obstacle, spawnObstacle, updateObstacles, nextSpawnDelay } from './entities/obstacle'
-import { scheduleJump, executeJump }                     from './ai/ruleBasedAI'
+import { scheduleJump, executeJump, updateDuckState }    from './ai/ruleBasedAI'
 import {
+  W, GROUND_Y, GRAVITY, JUMP_VEL, NORMAL_HEIGHT, DINO_WIDTH,
   JUMP_POWER_MIN, JUMP_POWER_MAX, CHARGE_FRAMES_MAX, chargeToPower,
+  framesToPeak, airTimeFrames, clearanceFrames, OBSTACLE_H_EFFECTIVE_MAX,
 } from './physics'
-import type { GameState, GamePhase, Winner } from '../shared/types'
+import type { GameState, GamePhase, Winner, AiDebugOverlayState, PointState } from '../shared/types'
+
+const DEBUG_BOX_SCALE = 0.90
+const DEBUG_BOX_INSET_PX = 1
+const DEBUG_ARC_MAX_X_PADDING = 40
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v))
+}
 
 function rectsOverlap(
   a: { x: number; y: number; w: number; h: number },
@@ -73,9 +83,63 @@ export class GameLoop {
     this.log('--- new game ---')
   }
 
+  private buildAiDebugOverlay(): AiDebugOverlayState | undefined {
+    const target = this.obstacles.find(o => o.x + o.w > this.aiDino.x && o.requiredPower !== undefined)
+    if (!target) return undefined
+
+    const fallbackPower = Math.max(JUMP_POWER_MIN, Math.min(JUMP_POWER_MAX, target.requiredPower!))
+    const power = (this.aiDino.nextJumpFrame !== null)
+      ? clamp(this.aiDino.nextJumpPower, JUMP_POWER_MIN, JUMP_POWER_MAX)
+      : fallbackPower
+    const toPeak = framesToPeak(power)
+    const toEnter = Math.floor((target.x - (this.aiDino.x + this.aiDino.w)) / this.speed)
+    const toCenter = toEnter + Math.floor((target.w / 2) / this.speed)
+    const jumpIn = (this.aiDino.nextJumpFrame !== null)
+      ? Math.max(0, this.aiDino.nextJumpFrame - this.frameCount)
+      : Math.max(0, toCenter - Math.round(toPeak))
+    const landingFrames = airTimeFrames(power)
+    const dinoRect = this.aiDino.bbox()
+
+    const fullRectH = OBSTACLE_H_EFFECTIVE_MAX
+    const fullRectW = Math.max(0, Math.floor(clearanceFrames(JUMP_POWER_MAX, fullRectH) * this.speed - DINO_WIDTH))
+    const maxRectH = Math.max(1, fullRectH * DEBUG_BOX_SCALE - DEBUG_BOX_INSET_PX * 2)
+    const maxRectW = Math.max(1, fullRectW * DEBUG_BOX_SCALE - DEBUG_BOX_INSET_PX * 2)
+    const peakX = this.aiDino.x + this.speed * (jumpIn + toPeak)
+
+    const maxRect = {
+      x: peakX - maxRectW / 2,
+      y: GROUND_Y - maxRectH,
+      w: maxRectW,
+      h: maxRectH,
+    }
+    const obstacleRect = { x: target.x, y: target.y, w: target.w, h: target.h }
+
+    const jumpStartX = this.aiDino.x + this.speed * jumpIn
+    const takeoffY = GROUND_Y - NORMAL_HEIGHT
+    const halfG = GRAVITY / 2
+    const arcPoints: PointState[] = []
+
+    for (let n = 0; n <= landingFrames; n++) {
+      const x = this.aiDino.x + this.speed * (jumpIn + n)
+      const y = takeoffY + n * (JUMP_VEL * power) + halfG * n * (n - 1)
+      arcPoints.push({ x, y })
+      if (x > W + DEBUG_ARC_MAX_X_PADDING) break
+    }
+
+    return {
+      arcPoints,
+      dinoRect,
+      obstacleRect,
+      maxRect,
+      jumpStartX,
+      power,
+      jumpInFrames: jumpIn,
+    }
+  }
+
   // ── Per-frame tick ──────────────────────────────────────────
 
-  tick(): GameState {
+  tick(includeAiDebugOverlay: boolean = false): GameState {
     const events = {
       humanDied:   false,
       aiDied:      false,
@@ -103,6 +167,7 @@ export class GameLoop {
       }
 
       // ── AI ─────────────────────────────────────────────────
+      updateDuckState(this.aiDino, this.obstacles, this.speed)
       scheduleJump(this.aiDino, this.obstacles, this.speed, this.frameCount, msg => this.log(msg))
       const aiJumpPower = executeJump(this.aiDino, this.frameCount)
       if (aiJumpPower !== false) events.aiJumped = true
@@ -124,7 +189,7 @@ export class GameLoop {
       if (this.nextObstacleIn <= 0) {
         const obs = spawnObstacle(this.speed)
         this.obstacles.push(obs)
-        this.nextObstacleIn = nextSpawnDelay(this.lastObstacle, this.speed)
+        this.nextObstacleIn = nextSpawnDelay(this.lastObstacle, this.speed, this.frameCount)
         this.lastObstacle   = obs
       }
 
@@ -145,8 +210,7 @@ export class GameLoop {
       ? (this.humanDino.score > this.aiDino.score ? 'human'
         : this.aiDino.score > this.humanDino.score ? 'ai' : 'tie')
       : undefined
-
-    return {
+    const state: GameState = {
       frameCount:  this.frameCount,
       speed:       this.speed,
       phase:       this.phase,
@@ -160,6 +224,10 @@ export class GameLoop {
       events,
       winner,
     }
+    if (includeAiDebugOverlay) {
+      state.aiDebugOverlay = this.buildAiDebugOverlay()
+    }
+    return state
   }
 
   // ── Input handler ───────────────────────────────────────────

@@ -26,28 +26,39 @@
       Renderer = class {
         ctx;
         groundOffset = 0;
+        showHuman = true;
+        showDebugOverlays = false;
         constructor(canvas) {
           this.ctx = canvas.getContext("2d");
+        }
+        setOptions(opts) {
+          if (opts.showHuman !== void 0) this.showHuman = opts.showHuman;
+          if (opts.showDebugOverlays !== void 0) this.showDebugOverlays = opts.showDebugOverlays;
         }
         render(state, particles) {
           const { ctx } = this;
           ctx.clearRect(0, 0, W, H);
           this.drawGround(state.speed);
           if (state.phase === "waiting") {
-            this.drawDinoShape(state.human.x, state.human.y, state.human.w, state.human.h, state.human.color, false, 1, state.frameCount);
+            if (this.showHuman) {
+              this.drawDinoShape(state.human.x, state.human.y, state.human.w, state.human.h, state.human.color, false, 1, state.frameCount);
+            }
             this.drawDinoShape(state.ai.x + 36, state.ai.y, state.ai.w, state.ai.h, state.ai.color, false, 0.35, state.frameCount);
             this.drawMessage("DINORUN", "SPACE (hold) to charge jump \xB7 1-5 for fixed power \xB7 \u2193 duck", "human vs machine");
             this.drawLegend(state);
             return;
           }
           this.drawObstacles(state.obstacles);
+          if (this.showDebugOverlays) {
+            this.drawAiDebugOverlay(state);
+          }
           if (state.ai.alive) {
             this.drawDinoShape(state.ai.x, state.ai.y, state.ai.w, state.ai.h, state.ai.color, state.ai.ducking, 0.45, state.frameCount);
           }
-          if (state.human.alive) {
+          if (this.showHuman && state.human.alive) {
             this.drawDinoShape(state.human.x, state.human.y, state.human.w, state.human.h, state.human.color, state.human.ducking, 1, state.frameCount);
           }
-          if (state.humanCharging) {
+          if (this.showHuman && state.humanCharging) {
             this.drawChargeBar(state.human.x, state.human.y, state.humanChargeProgress);
           }
           for (const p of particles) {
@@ -62,6 +73,55 @@
             const title = state.winner === "human" ? "YOU WIN" : state.winner === "ai" ? "AI WINS" : "DRAW";
             this.drawMessage(title, "SPACE or 1-5 to restart", `you: ${state.human.score}  ai: ${state.ai.score}`, color);
           }
+        }
+        drawAiDebugOverlay(state) {
+          const { ctx } = this;
+          const debug = state.aiDebugOverlay;
+          if (!debug) return;
+          ctx.save();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#ff3344";
+          ctx.setLineDash([4, 3]);
+          ctx.strokeRect(debug.maxRect.x, debug.maxRect.y, debug.maxRect.w, debug.maxRect.h);
+          ctx.fillStyle = "rgba(255, 51, 68, 0.12)";
+          ctx.fillRect(debug.maxRect.x, debug.maxRect.y, debug.maxRect.w, debug.maxRect.h);
+          ctx.setLineDash([]);
+          ctx.strokeStyle = "#3bd3ff";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(debug.dinoRect.x, debug.dinoRect.y, debug.dinoRect.w, debug.dinoRect.h);
+          ctx.fillStyle = "rgba(59, 211, 255, 0.08)";
+          ctx.fillRect(debug.dinoRect.x, debug.dinoRect.y, debug.dinoRect.w, debug.dinoRect.h);
+          ctx.strokeStyle = "#ffe66d";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(debug.obstacleRect.x, debug.obstacleRect.y, debug.obstacleRect.w, debug.obstacleRect.h);
+          ctx.fillStyle = "rgba(255, 230, 109, 0.10)";
+          ctx.fillRect(debug.obstacleRect.x, debug.obstacleRect.y, debug.obstacleRect.w, debug.obstacleRect.h);
+          const jumpStartX = debug.jumpStartX;
+          ctx.strokeStyle = "#8ecae6";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(jumpStartX, GROUND_Y + 14);
+          ctx.lineTo(jumpStartX, GROUND_Y - 10);
+          ctx.stroke();
+          ctx.strokeStyle = "#8ecae6";
+          if (debug.arcPoints.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(debug.arcPoints[0].x, debug.arcPoints[0].y);
+            for (let i = 1; i < debug.arcPoints.length; i++) {
+              ctx.lineTo(debug.arcPoints[i].x, debug.arcPoints[i].y);
+            }
+            ctx.stroke();
+          }
+          ctx.fillStyle = "#8ecae6";
+          ctx.font = "9px Share Tech Mono, monospace";
+          ctx.fillText(`AI arc p=${debug.power.toFixed(2)} j+${debug.jumpInFrames}f`, 8, 44);
+          ctx.fillStyle = "#3bd3ff";
+          ctx.fillText(`dino bbox`, 8, 56);
+          ctx.fillStyle = "#ffe66d";
+          ctx.fillText(`obstacle bbox`, 8, 68);
+          ctx.fillStyle = "#ff6677";
+          ctx.fillText(`max box h=${debug.maxRect.h.toFixed(1)} w=${Math.floor(debug.maxRect.w)}`, 8, 80);
+          ctx.restore();
         }
         // ── Ground ─────────────────────────────────────────────────
         drawGround(speed) {
@@ -254,14 +314,16 @@
         drawLegend(state) {
           const { ctx } = this;
           ctx.font = "10px Share Tech Mono, monospace";
-          ctx.fillStyle = "#00e5ff";
-          ctx.fillRect(8, 8, 10, 10);
-          ctx.fillStyle = "#00e5ffaa";
-          ctx.fillText("YOU", 22, 17);
+          if (this.showHuman) {
+            ctx.fillStyle = "#00e5ff";
+            ctx.fillRect(8, 8, 10, 10);
+            ctx.fillStyle = "#00e5ffaa";
+            ctx.fillText("YOU", 22, 17);
+          }
           ctx.fillStyle = "#ff6b3566";
-          ctx.fillRect(8, 22, 10, 10);
+          ctx.fillRect(8, this.showHuman ? 22 : 8, 10, 10);
           ctx.fillStyle = "#ff6b3588";
-          ctx.fillText("AI", 22, 31);
+          ctx.fillText("AI", 22, this.showHuman ? 31 : 17);
           ctx.fillStyle = "#3a3a5a";
           ctx.textAlign = "right";
           ctx.fillText(`SPD ${state.speed.toFixed(1)}`, W - 8, 17);
@@ -425,6 +487,35 @@
       var sound = new SoundManager();
       var ui = new UIManager();
       var particles = [];
+      var modeSwitch = document.getElementById("mode-switch");
+      var debugOverlaySwitch = document.getElementById("debug-overlay-switch");
+      var playMode = "ai-player";
+      var showDebugOverlays = false;
+      function applyRenderOptions() {
+        renderer.setOptions({
+          showHuman: playMode === "ai-player",
+          showDebugOverlays
+        });
+      }
+      function isHumanControlLocked() {
+        return playMode === "ai-only" && latestState?.phase === "playing";
+      }
+      if (modeSwitch) {
+        modeSwitch.value = playMode;
+        modeSwitch.addEventListener("change", () => {
+          playMode = modeSwitch.value === "ai-only" ? "ai-only" : "ai-player";
+          applyRenderOptions();
+        });
+      }
+      if (debugOverlaySwitch) {
+        debugOverlaySwitch.checked = showDebugOverlays;
+        debugOverlaySwitch.addEventListener("change", () => {
+          showDebugOverlays = debugOverlaySwitch.checked;
+          applyRenderOptions();
+          send("setDebugOverlay", { enabled: showDebugOverlays });
+        });
+      }
+      applyRenderOptions();
       var proto = location.protocol === "https:" ? "wss:" : "ws:";
       var ws = new WebSocket(`${proto}//${location.host}`);
       var latestState = null;
@@ -442,6 +533,9 @@
         if (state.events.aiJumped) sound.play("aiJump");
         if (state.events.humanJumped) sound.play("playerJump");
         latestState = state;
+      };
+      ws.onopen = () => {
+        send("setDebugOverlay", { enabled: showDebugOverlays });
       };
       ws.onerror = () => console.error("[ws] connection error");
       ws.onclose = () => console.warn("[ws] disconnected \u2014 reload to reconnect");
@@ -463,39 +557,48 @@
         keys[e.code] = true;
         if (e.code === "Space" || e.code === "ArrowUp") {
           e.preventDefault();
+          if (isHumanControlLocked()) return;
           send("jumpStart");
         }
         if (POWER_KEYS[e.code] !== void 0) {
           e.preventDefault();
+          if (isHumanControlLocked()) return;
           send("jump", { power: POWER_KEYS[e.code] });
         }
         if (e.code === "ArrowDown") {
           e.preventDefault();
+          if (isHumanControlLocked()) return;
           send("duckStart");
         }
       });
       window.addEventListener("keyup", (e) => {
         keys[e.code] = false;
         if (e.code === "Space" || e.code === "ArrowUp") {
+          if (isHumanControlLocked()) return;
           send("jumpRelease");
         }
         if (e.code === "ArrowDown") {
+          if (isHumanControlLocked()) return;
           send("duckEnd");
         }
       });
       function onJumpPress() {
+        if (isHumanControlLocked()) return;
         send("jumpStart");
         document.getElementById("btn-jump")?.classList.add("pressed");
       }
       function onJumpRelease() {
+        if (isHumanControlLocked()) return;
         send("jumpRelease");
         document.getElementById("btn-jump")?.classList.remove("pressed");
       }
       function onDuckPress() {
+        if (isHumanControlLocked()) return;
         send("duckStart");
         document.getElementById("btn-duck")?.classList.add("pressed");
       }
       function onDuckRelease() {
+        if (isHumanControlLocked()) return;
         send("duckEnd");
         document.getElementById("btn-duck")?.classList.remove("pressed");
       }

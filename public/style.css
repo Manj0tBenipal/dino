@@ -207,6 +207,42 @@ h1 span { color: var(--human); }
   letter-spacing: 0.1em;
 }
 
+.debug-controls {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.debug-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
+.debug-item select {
+  background: var(--border);
+  border: 1px solid var(--dim);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.16rem 0.35rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.66rem;
+}
+
+.debug-item.check input {
+  accent-color: var(--human);
+}
+
 .key {
   display: inline-block;
   border: 1px solid var(--dim);
@@ -277,6 +313,11 @@ h1 span { color: var(--human); }
   .desktop-only   { display: none; }
 
   .container { gap: 0.4rem; }
+  .debug-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
 
   .ai-log { height: 44px; }
 }
