@@ -1,8 +1,9 @@
 import http    from 'http'
 import fs      from 'fs'
 import path    from 'path'
-import { WebSocketServer } from 'ws'
+import { WebSocketServer, type WebSocket } from 'ws'
 import { GameLoop }        from './gameLoop'
+import type { ClientMessage, GameState } from '../shared/types'
 
 const PORT       = parseInt(process.env.PORT ?? '3000', 10)
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public')
@@ -81,28 +82,44 @@ const wss = new WebSocketServer({ server: httpServer })
 // One shared game loop — all connected clients observe the same simulation.
 // Any client can control the human dino (first to press wins).
 const game = new GameLoop()
+const clientDebugOverlay = new WeakMap<WebSocket, boolean>()
 
 const TICK_MS = 1000 / 60  // ~16.67 ms → 60 fps
 
 setInterval(() => {
-  const state = game.tick()
-  const msg   = JSON.stringify(state)
-  for (const client of wss.clients) {
-    if (client.readyState === 1 /* OPEN */) {
-      client.send(msg)
-    }
+  const openClients = [...wss.clients].filter(client => client.readyState === 1 /* OPEN */)
+  const hasDebugAudience = openClients.some(client => clientDebugOverlay.get(client) === true)
+  const state = game.tick(hasDebugAudience)
+  const baseState: Omit<GameState, 'aiDebugOverlay'> = (() => {
+    const { aiDebugOverlay: _omit, ...rest } = state
+    return rest
+  })()
+  const baseMsg = JSON.stringify(baseState)
+  const debugMsg = hasDebugAudience ? JSON.stringify(state) : baseMsg
+
+  for (const client of openClients) {
+    const wantsDebug = clientDebugOverlay.get(client) === true
+    client.send(wantsDebug ? debugMsg : baseMsg)
   }
 }, TICK_MS)
 
 wss.on('connection', (ws, req) => {
   const ip = req.socket.remoteAddress ?? 'unknown'
   console.log(`[ws] client connected  — ${ip}  (${wss.clients.size} total)`)
+  clientDebugOverlay.set(ws, false)
 
   ws.on('message', (data) => {
     try {
-      const msg = JSON.parse(data.toString())
-      if (typeof msg.type === 'string') {
-        game.handleInput(msg.type)
+      const raw = JSON.parse(data.toString()) as Partial<ClientMessage> & Record<string, unknown>
+      if (raw?.type === 'setDebugOverlay') {
+        clientDebugOverlay.set(ws, raw.enabled === true)
+        return
+      }
+      if (typeof raw?.type === 'string') {
+        game.handleInput({
+          type: raw.type,
+          power: typeof raw.power === 'number' ? raw.power : undefined,
+        })
       }
     } catch {
       // ignore malformed messages

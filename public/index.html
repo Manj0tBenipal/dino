@@ -40,10 +40,11 @@
       <div id="death-warning" class="death-warning hidden">YOU DIED</div>
     </div>
 
+    <!-- mobile touch controls -->
     <div class="touch-controls">
       <button class="touch-btn" id="btn-jump"
         ontouchstart="onJumpPress()" ontouchend="onJumpRelease()">
-        <span>▲</span><small>JUMP</small>
+        <span>▲</span><small>HOLD TO CHARGE</small>
       </button>
       <button class="touch-btn" id="btn-duck"
         ontouchstart="onDuckPress()" ontouchend="onDuckRelease()">
@@ -52,8 +53,24 @@
     </div>
 
     <div class="controls desktop-only">
-      <span class="key">SPACE</span> jump &nbsp;·&nbsp;
+      <span class="key">SPACE</span> hold to charge jump &nbsp;·&nbsp;
+      <span class="key">1</span>–<span class="key">5</span> fixed power (0.6→1.0) &nbsp;·&nbsp;
       <span class="key">↓</span> duck
+    </div>
+
+    <div class="debug-controls">
+      <label class="debug-item">
+        <span>Mode</span>
+        <select id="mode-switch">
+          <option value="ai-player" selected>AI &amp; Player</option>
+          <option value="ai-only">AI only</option>
+        </select>
+      </label>
+
+      <label class="debug-item check">
+        <input type="checkbox" id="debug-overlay-switch">
+        <span>Draw Arc + Bounding Rect</span>
+      </label>
     </div>
 
     <div class="ai-log-wrapper">
