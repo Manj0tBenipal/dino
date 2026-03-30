@@ -1,0 +1,25 @@
+{
+  "name": "dinorun",
+  "version": "1.0.0",
+  "description": "Chrome Dino clone — human vs rule-based AI, server-authoritative with live WebSocket state",
+  "type": "commonjs",
+  "scripts": {
+    "build:client": "esbuild src/client/main.ts --bundle --outfile=public/client.js --platform=browser",
+    "build:server": "tsc",
+    "build": "npm run build:client && npm run build:server",
+    "dev": "npm run build:client && tsx src/server/index.ts",
+    "dev:watch": "concurrently \"esbuild src/client/main.ts --bundle --outfile=public/client.js --platform=browser --watch\" \"tsx --watch src/server/index.ts\"",
+    "start": "node dist/server/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.13",
+    "concurrently": "^9.0.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

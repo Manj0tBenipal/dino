@@ -1,0 +1,287 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap');
+
+:root {
+  --bg:      #0a0a0f;
+  --surface: #12121a;
+  --border:  #1e1e2e;
+  --human:   #00e5ff;
+  --ai:      #ff6b35;
+  --neutral: #4a4a6a;
+  --text:    #c8c8e0;
+  --dim:     #3a3a5a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Share Tech Mono', 'Courier New', monospace;
+  color: var(--text);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 860px;
+  padding: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Header ── */
+header { text-align: center; }
+
+h1 {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.2rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text);
+}
+
+h1 span { color: var(--human); }
+
+.subtitle {
+  font-size: clamp(0.55rem, 1.5vw, 0.7rem);
+  letter-spacing: 0.4em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+/* ── Scoreboard ── */
+.scoreboard {
+  display: flex;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 400px;
+}
+
+.score-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  background: var(--surface);
+  gap: 0.15rem;
+}
+
+.score-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.3em;
+  color: var(--dim);
+}
+
+.score-value {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(0.8rem, 2.5vw, 1rem);
+  font-weight: 400;
+}
+
+.score-card.human .score-value { color: var(--human); }
+.score-card.ai    .score-value { color: var(--ai); }
+.score-card.hi    .score-value { color: var(--text); }
+
+/* ── Canvas ── */
+.canvas-wrapper {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+}
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--surface);
+}
+
+.scanline {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.06) 2px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+}
+
+/* death warning overlay */
+.death-warning {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1rem, 4vw, 1.5rem);
+  color: #ff3355;
+  letter-spacing: 0.2em;
+  text-shadow: 0 0 20px #ff335588;
+  animation: flashWarn 0.4s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.death-warning.hidden { display: none; }
+
+@keyframes flashWarn {
+  from { opacity: 1; }
+  to   { opacity: 0.3; }
+}
+
+/* ── Touch Controls ── */
+.touch-controls {
+  display: none;
+  gap: 1rem;
+  width: 100%;
+  max-width: 400px;
+}
+
+.touch-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1.4rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.1s, border-color 0.1s;
+  touch-action: none;
+}
+
+.touch-btn:active, .touch-btn.pressed {
+  background: var(--border);
+  border-color: var(--human);
+}
+
+.touch-btn small {
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+}
+
+/* ── Desktop controls hint ── */
+.controls {
+  font-size: 0.72rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+}
+
+.key {
+  display: inline-block;
+  border: 1px solid var(--dim);
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  color: var(--text);
+}
+
+/* ── AI Log ── */
+.ai-log-wrapper {
+  width: 100%;
+  max-width: 860px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ai-log-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.8rem;
+  background: var(--border);
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  color: var(--dim);
+}
+
+.ai-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ai);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.ai-log {
+  height: 60px;
+  overflow-y: auto;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.65rem;
+  color: var(--ai);
+  opacity: 0.8;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.ai-log .log-line {
+  opacity: 1;
+  transition: opacity 2s;
+}
+
+.ai-log .log-line.fading {
+  opacity: 0.3;
+}
+
+/* ── Mobile layout ── */
+@media (max-width: 600px), (pointer: coarse) {
+  .touch-controls { display: flex; }
+  .desktop-only   { display: none; }
+
+  .container { gap: 0.4rem; }
+
+  .ai-log { height: 44px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  header      { display: none; }
+  .ai-log     { height: 36px; }
+}
