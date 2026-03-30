@@ -36,7 +36,7 @@
           if (state.phase === "waiting") {
             this.drawDinoShape(state.human.x, state.human.y, state.human.w, state.human.h, state.human.color, false, 1, state.frameCount);
             this.drawDinoShape(state.ai.x + 36, state.ai.y, state.ai.w, state.ai.h, state.ai.color, false, 0.35, state.frameCount);
-            this.drawMessage("DINORUN", "tap or press SPACE to start", "human vs machine");
+            this.drawMessage("DINORUN", "SPACE (hold) to charge jump \xB7 1-5 for fixed power \xB7 \u2193 duck", "human vs machine");
             this.drawLegend(state);
             return;
           }
@@ -47,6 +47,9 @@
           if (state.human.alive) {
             this.drawDinoShape(state.human.x, state.human.y, state.human.w, state.human.h, state.human.color, state.human.ducking, 1, state.frameCount);
           }
+          if (state.humanCharging) {
+            this.drawChargeBar(state.human.x, state.human.y, state.humanChargeProgress);
+          }
           for (const p of particles) {
             ctx.globalAlpha = Math.max(0, p.life);
             ctx.fillStyle = p.color;
@@ -55,13 +58,12 @@
           ctx.globalAlpha = 1;
           this.drawLegend(state);
           if (state.phase === "gameover" && particles.length === 0) {
-            const humanWon = state.winner === "human";
-            const color = humanWon ? "#00e5ff" : "#ff6b35";
-            const title = humanWon ? "YOU WIN" : state.winner === "ai" ? "AI WINS" : "DRAW";
-            this.drawMessage(title, "tap or SPACE to restart", `you: ${state.human.score}  ai: ${state.ai.score}`, color);
+            const color = state.winner === "human" ? "#00e5ff" : "#ff6b35";
+            const title = state.winner === "human" ? "YOU WIN" : state.winner === "ai" ? "AI WINS" : "DRAW";
+            this.drawMessage(title, "SPACE or 1-5 to restart", `you: ${state.human.score}  ai: ${state.ai.score}`, color);
           }
         }
-        // ── Private drawing helpers ────────────────────────────────────
+        // ── Ground ─────────────────────────────────────────────────
         drawGround(speed) {
           const { ctx } = this;
           this.groundOffset = (this.groundOffset + speed) % 40;
@@ -77,6 +79,7 @@
             ctx.fillRect(x + 20, GROUND_Y + 7, 8, 2);
           }
         }
+        // ── Dino ───────────────────────────────────────────────────
         drawDinoShape(x, y, w, h, color, ducking, alpha, frameCount) {
           const { ctx } = this;
           ctx.globalAlpha = alpha;
@@ -121,11 +124,47 @@
           }
           ctx.globalAlpha = 1;
         }
+        // ── Charge bar ─────────────────────────────────────────────
+        drawChargeBar(dinoX, dinoY, progress) {
+          const { ctx } = this;
+          const bx = dinoX - 4;
+          const by = dinoY - 14;
+          const bw = 36;
+          const bh = 5;
+          ctx.fillStyle = "#1e1e2e";
+          ctx.fillRect(bx, by, bw, bh);
+          const r = Math.floor(progress * 255);
+          const g = Math.floor((1 - progress * 0.8) * 230);
+          ctx.fillStyle = `rgb(${r},${g},${Math.floor((1 - progress) * 255)})`;
+          ctx.fillRect(bx, by, Math.round(progress * bw), bh);
+          ctx.strokeStyle = "#3a3a5a";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(bx, by, bw, bh);
+          const power = 0.6 + progress * 0.4;
+          ctx.fillStyle = "#c8c8e0";
+          ctx.font = "8px Share Tech Mono, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(power.toFixed(1), bx + bw / 2, by - 2);
+          ctx.textAlign = "left";
+        }
+        // ── Obstacles ──────────────────────────────────────────────
         drawObstacles(obstacles) {
           for (const obs of obstacles) {
             if (obs.type === "cactus") this.drawCactus(obs);
-            else this.drawBird(obs);
+            else if (obs.type === "bird") this.drawBird(obs);
+            else if (obs.type === "worm") this.drawWorm(obs);
+            if (obs.type !== "bird" && obs.requiredPower !== void 0) {
+              this.drawPowerHint(obs);
+            }
           }
+        }
+        drawPowerHint(obs) {
+          const { ctx } = this;
+          ctx.fillStyle = "#3a3a5a";
+          ctx.font = "7px Share Tech Mono, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(`p${obs.requiredPower.toFixed(1)}`, obs.x + obs.w / 2, obs.y - 4);
+          ctx.textAlign = "left";
         }
         drawCactus(obs) {
           const { ctx } = this;
@@ -155,7 +194,7 @@
           ctx.fillRect(x + w, y + 8, 5, 3);
           ctx.fillStyle = "#1a1a1a";
           ctx.fillRect(x + w - 5, y + 6, 3, 3);
-          ctx.fillStyle = obs.wingUp ? "#c87830" : "#c87830";
+          ctx.fillStyle = "#c87830";
           if (obs.wingUp) {
             ctx.fillRect(x + 2, y, w - 12, 8);
             ctx.fillStyle = "#f0a060";
@@ -166,6 +205,52 @@
             ctx.fillRect(x + 4, y + h - 3, w - 18, 3);
           }
         }
+        /**
+         * Draw a segmented worm following a sine-wave path.
+         * Each segment is a circle, with the "head" slightly larger and darker.
+         * The phase angle shifts each frame to animate the wiggle.
+         */
+        drawWorm(obs) {
+          const { ctx } = this;
+          const phase = obs.phase ?? 0;
+          const segments = Math.ceil(obs.w / 7);
+          const segW = obs.w / segments;
+          const r = obs.h / 2 + 1;
+          const amp = obs.h * 0.35;
+          const midY = obs.y + obs.h / 2;
+          for (let i = 0; i < segments; i++) {
+            const t = i / (segments - 1);
+            const cx = obs.x + i * segW + segW / 2;
+            const cy = midY + Math.sin(i * 1.1 + phase) * amp;
+            const isHead = i === 0;
+            if (isHead) {
+              ctx.fillStyle = "#6b3a10";
+            } else {
+              const bright = 0.7 + 0.3 * Math.sin(i * 0.9);
+              ctx.fillStyle = `rgb(${Math.floor(140 * bright)},${Math.floor(90 * bright)},${Math.floor(20 * bright)})`;
+            }
+            ctx.beginPath();
+            ctx.arc(cx, cy, isHead ? r + 1 : r, 0, Math.PI * 2);
+            ctx.fill();
+            if (isHead) {
+              ctx.fillStyle = "#ffff80";
+              ctx.beginPath();
+              ctx.arc(cx - 3, cy - 3, 2.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(cx + 3, cy - 3, 2.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = "#111";
+              ctx.beginPath();
+              ctx.arc(cx - 3, cy - 3, 1.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(cx + 3, cy - 3, 1.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
+        // ── HUD ────────────────────────────────────────────────────
         drawLegend(state) {
           const { ctx } = this;
           ctx.font = "10px Share Tech Mono, monospace";
@@ -188,7 +273,7 @@
           ctx.font = "bold 16px Orbitron, monospace";
           ctx.textAlign = "center";
           ctx.fillText(line1, W / 2, H / 2 - 14);
-          ctx.font = "11px Share Tech Mono, monospace";
+          ctx.font = "10px Share Tech Mono, monospace";
           ctx.fillStyle = "#4a4a6a";
           ctx.fillText(line2, W / 2, H / 2 + 8);
           if (line3) {
@@ -354,26 +439,35 @@
           sound.play("dead");
           particles.push(...explode(state.ai.x, state.ai.y, state.ai.w, state.ai.h, state.ai.color));
         }
-        if (state.events.aiJumped) {
-          sound.play("aiJump");
-        }
+        if (state.events.aiJumped) sound.play("aiJump");
+        if (state.events.humanJumped) sound.play("playerJump");
         latestState = state;
       };
       ws.onerror = () => console.error("[ws] connection error");
-      ws.onclose = () => console.warn("[ws] disconnected");
-      function send(type) {
+      ws.onclose = () => console.warn("[ws] disconnected \u2014 reload to reconnect");
+      function send(type, extra) {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type }));
+          ws.send(JSON.stringify({ type, ...extra }));
         }
       }
       var keys = {};
+      var POWER_KEYS = {
+        Digit1: 0.6,
+        Digit2: 0.7,
+        Digit3: 0.8,
+        Digit4: 0.9,
+        Digit5: 1
+      };
       window.addEventListener("keydown", (e) => {
         if (keys[e.code]) return;
         keys[e.code] = true;
         if (e.code === "Space" || e.code === "ArrowUp") {
           e.preventDefault();
-          sound.play("playerJump");
-          send("jump");
+          send("jumpStart");
+        }
+        if (POWER_KEYS[e.code] !== void 0) {
+          e.preventDefault();
+          send("jump", { power: POWER_KEYS[e.code] });
         }
         if (e.code === "ArrowDown") {
           e.preventDefault();
@@ -382,14 +476,19 @@
       });
       window.addEventListener("keyup", (e) => {
         keys[e.code] = false;
-        if (e.code === "ArrowDown") send("duckEnd");
+        if (e.code === "Space" || e.code === "ArrowUp") {
+          send("jumpRelease");
+        }
+        if (e.code === "ArrowDown") {
+          send("duckEnd");
+        }
       });
       function onJumpPress() {
-        sound.play("playerJump");
-        send("jump");
+        send("jumpStart");
         document.getElementById("btn-jump")?.classList.add("pressed");
       }
       function onJumpRelease() {
+        send("jumpRelease");
         document.getElementById("btn-jump")?.classList.remove("pressed");
       }
       function onDuckPress() {
@@ -400,10 +499,11 @@
         send("duckEnd");
         document.getElementById("btn-duck")?.classList.remove("pressed");
       }
-      window.onJumpPress = onJumpPress;
-      window.onJumpRelease = onJumpRelease;
-      window.onDuckPress = onDuckPress;
-      window.onDuckRelease = onDuckRelease;
+      var win = window;
+      win.onJumpPress = onJumpPress;
+      win.onJumpRelease = onJumpRelease;
+      win.onDuckPress = onDuckPress;
+      win.onDuckRelease = onDuckRelease;
       function frame() {
         requestAnimationFrame(frame);
         if (!latestState) return;

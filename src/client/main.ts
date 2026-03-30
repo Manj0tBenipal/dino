@@ -1,8 +1,8 @@
-import { Renderer }    from './renderer'
-import { SoundManager } from './sound'
-import { UIManager }    from './ui'
+import { Renderer }         from './renderer'
+import { SoundManager }     from './sound'
+import { UIManager }        from './ui'
 import { Particle, explode } from './particles'
-import type { GameState } from '../shared/types'
+import type { GameState }   from '../shared/types'
 
 // ── PWA service worker ─────────────────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -18,7 +18,6 @@ const renderer = new Renderer(canvas)
 const sound    = new SoundManager()
 const ui       = new UIManager()
 
-// ── Client-side particles (cosmetic only) ─────────────────────
 let particles: Particle[] = []
 
 // ── WebSocket ─────────────────────────────────────────────────
@@ -30,7 +29,6 @@ let latestState: GameState | null = null
 ws.onmessage = (ev: MessageEvent) => {
   const state: GameState = JSON.parse(ev.data as string)
 
-  // ── One-shot events (only true on the frame they happen) ──
   if (state.events.humanDied) {
     sound.play('dead')
     particles.push(...explode(state.human.x, state.human.y, state.human.w, state.human.h, state.human.color))
@@ -40,35 +38,46 @@ ws.onmessage = (ev: MessageEvent) => {
     sound.play('dead')
     particles.push(...explode(state.ai.x, state.ai.y, state.ai.w, state.ai.h, state.ai.color))
   }
-  if (state.events.aiJumped) {
-    sound.play('aiJump')
-  }
+  if (state.events.aiJumped)    sound.play('aiJump')
+  if (state.events.humanJumped) sound.play('playerJump')
 
   latestState = state
 }
 
 ws.onerror = () => console.error('[ws] connection error')
-ws.onclose = () => console.warn('[ws] disconnected')
+ws.onclose = () => console.warn('[ws] disconnected — reload to reconnect')
 
 // ── Send input to server ──────────────────────────────────────
-function send(type: string) {
+function send(type: string, extra?: Record<string, unknown>) {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type }))
+    ws.send(JSON.stringify({ type, ...extra }))
   }
 }
 
 // ── Keyboard ──────────────────────────────────────────────────
 const keys: Record<string, boolean> = {}
 
+// Keys 1-5 map to discrete jump powers
+const POWER_KEYS: Record<string, number> = {
+  Digit1: 0.6, Digit2: 0.7, Digit3: 0.8, Digit4: 0.9, Digit5: 1.0,
+}
+
 window.addEventListener('keydown', (e: KeyboardEvent) => {
   if (keys[e.code]) return
   keys[e.code] = true
 
+  // ── Hold SPACE / ArrowUp to charge ──
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault()
-    sound.play('playerJump')  // optimistic — plays before server confirms
-    send('jump')
+    send('jumpStart')
   }
+
+  // ── Keys 1-5: instant fixed-power jump ──
+  if (POWER_KEYS[e.code] !== undefined) {
+    e.preventDefault()
+    send('jump', { power: POWER_KEYS[e.code] })
+  }
+
   if (e.code === 'ArrowDown') {
     e.preventDefault()
     send('duckStart')
@@ -77,16 +86,22 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
 
 window.addEventListener('keyup', (e: KeyboardEvent) => {
   keys[e.code] = false
-  if (e.code === 'ArrowDown') send('duckEnd')
+
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    send('jumpRelease')
+  }
+  if (e.code === 'ArrowDown') {
+    send('duckEnd')
+  }
 })
 
-// ── Touch (called from HTML button attributes) ────────────────
+// ── Touch (button event attributes) ──────────────────────────
 function onJumpPress() {
-  sound.play('playerJump')
-  send('jump')
+  send('jumpStart')
   document.getElementById('btn-jump')?.classList.add('pressed')
 }
 function onJumpRelease() {
+  send('jumpRelease')
   document.getElementById('btn-jump')?.classList.remove('pressed')
 }
 function onDuckPress() {
@@ -99,17 +114,17 @@ function onDuckRelease() {
 }
 
 // Expose to HTML element event attributes
-;(window as unknown as Record<string, unknown>).onJumpPress   = onJumpPress
-;(window as unknown as Record<string, unknown>).onJumpRelease = onJumpRelease
-;(window as unknown as Record<string, unknown>).onDuckPress   = onDuckPress
-;(window as unknown as Record<string, unknown>).onDuckRelease = onDuckRelease
+const win = window as unknown as Record<string, unknown>
+win.onJumpPress   = onJumpPress
+win.onJumpRelease = onJumpRelease
+win.onDuckPress   = onDuckPress
+win.onDuckRelease = onDuckRelease
 
-// ── Render loop (rAF — decoupled from WS messages) ────────────
+// ── Render loop ───────────────────────────────────────────────
 function frame() {
   requestAnimationFrame(frame)
   if (!latestState) return
 
-  // Update & cull local particles
   for (const p of particles) p.update()
   particles = particles.filter(p => !p.dead)
 
