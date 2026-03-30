@@ -18,6 +18,23 @@ const hiScoreEl     = document.getElementById('hi-score');
 const deathWarning  = document.getElementById('death-warning');
 const aiLogEl       = document.getElementById('ai-log');
 
+// ─── Sound ────────────────────────────────────────────────────
+const sounds = {
+  playerJump: new Audio('./sounds/player-jump.mp3'),
+  aiJump:     new Audio('./sounds/ai-jump.mp3'),
+  dead:       new Audio('./sounds/dead.mp3'),
+};
+
+// Lower AI jump volume so it doesn't compete with player sounds
+sounds.aiJump.volume = 0.35;
+sounds.dead.volume   = 0.8;
+
+// play() can fail if user hasn't interacted with page yet — silence the error
+function playSound(snd) {
+  snd.currentTime = 0;
+  snd.play().catch(() => {});
+}
+
 // ─── Constants ────────────────────────────────────────────────
 const GROUND_Y       = 220;
 const GRAVITY        = 0.6;
@@ -193,10 +210,11 @@ class Dino {
     this.deathY       = null;
   }
 
-  jump() {
+  jump(isAI = false) {
     if (this.onGround && this.alive) {
       this.vy       = JUMP_VEL;
       this.onGround = false;
+      playSound(isAI ? sounds.aiJump : sounds.playerJump);
     }
   }
 
@@ -232,6 +250,7 @@ class Dino {
     this.alive  = false;
     this.deathY = this.y;
     explode(this.x, this.y, this.w, this.h, this.color);
+    playSound(sounds.dead);
   }
 
   checkCollision() {
@@ -279,7 +298,7 @@ class Dino {
 
   executeJump() {
     if (this.nextJumpFrame !== null && frameCount >= this.nextJumpFrame) {
-      this.jump();
+      this.jump(true);  // isAI = true → plays ai-jump sound
       this.nextJumpFrame = null;
     }
   }
